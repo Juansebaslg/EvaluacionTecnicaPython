@@ -42,15 +42,18 @@ def create_message(payload: MessageCreate, db: Session = Depends(get_db)):
     )
     model = repo.create(model)
 
-    response: MessageOut = MessageOut(
-        **payload.model_dump(),
-        content=model.content,
-        metadata=MessageMetadata(
-            word_count=model.word_count,
-            character_count=model.character_count,
-            processed_at=model.processed_at,
-        ),
-    )
+data = payload.model_dump()
+data["content"] = model.content  # reemplazamos el valor original
+
+response: MessageOut = MessageOut(
+    **data,
+    metadata=MessageMetadata(
+        word_count=model.word_count,
+        character_count=model.character_count,
+        processed_at=model.processed_at,
+    ),
+)
+
 
     return {"status": "success", "data": response.model_dump()}
 
