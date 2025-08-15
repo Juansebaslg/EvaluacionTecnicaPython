@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.venv/
+env/
+venv/
+.env
+
+# Coverage
+htmlcov/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Byte-compiled / optimized / DLL files
+*.egg-info/
+dist/
+build/
