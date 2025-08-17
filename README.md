@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Chat Messages API (FastAPI + SQLite)
 
 API RESTful para procesar y almacenar mensajes de chat. Cumple con la evaluación técnica: validación, procesamiento (filtro simple), almacenamiento en SQLite, manejo de errores y pruebas.
@@ -188,3 +189,6 @@ docker run -p 8000:8000 chat-messages-api
 - El filtrado de palabras es básico (lista de términos configurables).
 - El contenido se guarda **ya filtrado**.
 - Los metadatos se almacenan como columnas para consultas eficientes.
+=======
+# EvaluacionTecnicaPython
+>>>>>>> 8b9cabacbdff91a9505a99a794dca082dc77f1aa

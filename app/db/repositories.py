@@ -1,33 +1,54 @@
-from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import or_
 from app.db.models import Message
+
 
 class MessageRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_by_message_id(self, message_id: str) -> Optional[Message]:
-        return self.db.get(Message, message_id)
-
-    def create(self, message: Message) -> Message:
-        self.db.add(message)
+    # Crear un mensaje
+    def create(self, model: Message):
+        self.db.add(model)
         self.db.commit()
-        self.db.refresh(message)
-        return message
+        self.db.refresh(model)
+        return model
 
-    def list_by_session(
-        self, session_id: str, sender: Optional[str], limit: int, offset: int
-    ) -> List[Message]:
-        stmt = select(Message).where(Message.session_id == session_id)
-        if sender:
-            stmt = stmt.where(Message.sender == sender)
-        stmt = stmt.order_by(Message.timestamp.asc()).limit(limit).offset(offset)
-        return list(self.db.execute(stmt).scalars())
+    # Buscar por message_id
+    def get_by_message_id(self, message_id: str):
+        return self.db.query(Message).filter(Message.message_id == message_id).first()
 
-    def count_by_session(self, session_id: str, sender: Optional[str]) -> int:
-        from sqlalchemy import func
-        stmt = select(func.count()).select_from(Message).where(Message.session_id == session_id)
+    # Listar mensajes de una sesión
+    def list_by_session(self, session_id: str, sender: str = None, limit: int = 10, offset: int = 0):
+        query = self.db.query(Message).filter(Message.session_id == session_id)
         if sender:
-            stmt = stmt.where(Message.sender == sender)
-        return self.db.execute(stmt).scalar_one()
+            query = query.filter(Message.sender == sender)
+        return query.offset(offset).limit(limit).all()
+
+    # Contar mensajes de una sesión
+    def count_by_session(self, session_id: str, sender: str = None):
+        query = self.db.query(Message).filter(Message.session_id == session_id)
+        if sender:
+            query = query.filter(Message.sender == sender)
+        return query.count()
+
+    #  Buscar mensajes por texto dentro de una sesión
+    def search_messages(self, session_id: str, query_text: str, limit: int = 10, offset: int = 0):
+        query = (
+            self.db.query(Message)
+            .filter(Message.session_id == session_id)
+            .filter(Message.content.ilike(f"%{query_text}%"))
+            .offset(offset)
+            .limit(limit)
+        )
+        return query.all()
+
+    # Contar resultados de búsqueda
+    def count_search_messages(self, session_id: str, query_text: str):
+        return (
+            self.db.query(Message)
+            .filter(Message.session_id == session_id)
+            .filter(Message.content.ilike(f"%{query_text}%"))
+            .count()
+        )
+
