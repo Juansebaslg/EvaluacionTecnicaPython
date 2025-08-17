@@ -5,6 +5,7 @@ from typing import Optional
 from app.api.deps import get_db
 from app.core.config import settings
 from app.core.errors import AppException
+from app.core.auth import verify_api_key
 from app.db.models import Message as MessageModel
 from app.db.repositories import MessageRepository
 from app.schemas.message import MessageCreate, MessageOut, MessageMetadata, MessagesPage
@@ -12,11 +13,16 @@ from app.services.processing import mask_banned_words, compute_metadata
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
+
 @router.post("", response_model=dict)
-def create_message(payload: MessageCreate, db: Session = Depends(get_db)):
+def create_message(
+    payload: MessageCreate,
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(verify_api_key),
+):
     repo = MessageRepository(db)
 
-    # Check uniqueness of message_id
+    # Verificar si message_id ya existe
     if repo.get_by_message_id(payload.message_id):
         raise AppException(
             code="DUPLICATE_MESSAGE_ID",
@@ -25,7 +31,7 @@ def create_message(payload: MessageCreate, db: Session = Depends(get_db)):
             http_status=409,
         )
 
-    # Filter content and compute metadata
+    # Filtrar contenido y calcular metadatos
     filtered_content, had_profanity = mask_banned_words(payload.content, settings.BANNED_WORDS)
     word_count, char_count, processed_at = compute_metadata(filtered_content)
 
@@ -42,9 +48,12 @@ def create_message(payload: MessageCreate, db: Session = Depends(get_db)):
     )
     model = repo.create(model)
 
+    # Construir respuesta sin pasar 'content' dos veces
+    data = payload.model_dump()
+    data["content"] = model.content  # reemplaza por el contenido filtrado
+
     response: MessageOut = MessageOut(
-        **payload.model_dump(),
-        content=model.content,
+        **data,
         metadata=MessageMetadata(
             word_count=model.word_count,
             character_count=model.character_count,
@@ -54,6 +63,7 @@ def create_message(payload: MessageCreate, db: Session = Depends(get_db)):
 
     return {"status": "success", "data": response.model_dump()}
 
+
 @router.get("/{session_id}", response_model=dict)
 def list_messages(
     session_id: str,
@@ -61,6 +71,7 @@ def list_messages(
     limit: int = Query(settings.DEFAULT_LIMIT, ge=1, le=settings.MAX_LIMIT),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    authorized: bool = Depends(verify_api_key),
 ):
     if sender not in (None, "user", "system"):
         raise AppException(
@@ -92,7 +103,61 @@ def list_messages(
         total=total,
         limit=limit,
         offset=offset,
-        items=[to_out(m).model_dump() for m in items],  # convert to dicts
+        items=[to_out(m).model_dump() for m in items],
     )
 
     return {"status": "success", "data": page.model_dump()}
+
+
+@router.get("/{session_id}/search", response_model=dict)
+def search_messages(
+    session_id: str,
+    q: str = Query(..., min_length=1, description="Texto a buscar en los mensajes"),
+    limit: int = Query(settings.DEFAULT_LIMIT, ge=1, le=settings.MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(verify_api_key),
+):
+    repo = MessageRepository(db)
+    query = (
+        db.query(MessageModel)
+        .filter(MessageModel.session_id == session_id)
+        .filter(MessageModel.content.ilike(f"%{q}%"))
+        .order_by(MessageModel.timestamp.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = query.all()
+    total = (
+        db.query(MessageModel)
+        .filter(MessageModel.session_id == session_id)
+        .filter(MessageModel.content.ilike(f"%{q}%"))
+        .count()
+    )
+
+    def to_out(m: MessageModel) -> MessageOut:
+        return MessageOut(
+            message_id=m.message_id,
+            session_id=m.session_id,
+            content=m.content,
+            timestamp=m.timestamp,
+            sender=m.sender,
+            metadata=MessageMetadata(
+                word_count=m.word_count,
+                character_count=m.character_count,
+                processed_at=m.processed_at,
+            ),
+        )
+
+    page = MessagesPage(
+        total=total,
+        limit=limit,
+        offset=offset,
+        items=[to_out(m).model_dump() for m in items],
+    )
+
+    return {"status": "success", "data": page.model_dump()}
+
+
+
+

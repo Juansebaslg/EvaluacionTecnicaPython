@@ -1,16 +1,21 @@
+# app/core/errors.py
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from fastapi.exceptions import RequestValidationError  
 from typing import Any
 
 class AppException(Exception):
+    # ... (el resto de la clase no cambia)
     def __init__(self, code: str, message: str, details: str | None = None, http_status: int = 400):
         self.code = code
         self.message = message
         self.details = details
         self.http_status = http_status
 
+
 def app_exception_handler(request: Request, exc: AppException):
+    # ... (esta función no cambia)
     return JSONResponse(
         status_code=exc.http_status,
         content={
@@ -23,8 +28,9 @@ def app_exception_handler(request: Request, exc: AppException):
         },
     )
 
-def validation_exception_handler(request: Request, exc: ValidationError):
-    # Transform pydantic validation into required JSON error format
+# 2. CAMBIA EL TIPO DE 'exc' AQUÍ
+def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Manejador para los errores de validación de Pydantic."""
     return JSONResponse(
         status_code=422,
         content={
@@ -32,12 +38,13 @@ def validation_exception_handler(request: Request, exc: ValidationError):
             "error": {
                 "code": "INVALID_FORMAT",
                 "message": "Formato de mensaje inválido",
-                "details": str(exc.errors()),
+                "details": exc.errors(), # Usamos exc.errors() directamente
             },
         },
     )
 
 def http_exception_handler(request: Request, exc: HTTPException):
+    # ... (esta función no cambia)
     return JSONResponse(
         status_code=exc.status_code,
         content={

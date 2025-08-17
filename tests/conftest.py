@@ -1,37 +1,59 @@
+# tests/conftest.py
 import pytest
 from fastapi.testclient import TestClient
-from app.main import create_app
-from app.db.base import Base, engine, SessionLocal
-from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.main import create_app
+from app.api.deps import get_db
 from app.core.config import settings
+from app.db.base import Base
+import app.db.models
+
+# --- Configuración de la Base de Datos de Pruebas ---
+engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 @pytest.fixture(scope="session", autouse=True)
-def _prepare_db():
-    # Use a separate SQLite DB in memory for tests
-    test_engine = create_engine("sqlite+pysqlite:///:memory:", connect_args={"check_same_thread": False})
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-    Base.metadata.create_all(bind=test_engine)
-
-    # Monkeypatch SessionLocal used by the app
-    import app.db.base as base_module
-    base_module.engine = test_engine
-    base_module.SessionLocal = TestingSessionLocal
-
+def setup_test_db():
+    """Crea las tablas una vez al inicio de la sesión de pruebas."""
+    Base.metadata.create_all(bind=engine)
     yield
+    Base.metadata.drop_all(bind=engine)
 
-    Base.metadata.drop_all(bind=test_engine)
 
-@pytest.fixture
-def client() -> TestClient:
+@pytest.fixture(scope="function", autouse=True)
+def clear_tables():
+    """Limpia todas las tablas después de cada test."""
+    yield
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(text(f"DELETE FROM {table.name};"))
+        transaction.commit()
+
+
+@pytest.fixture(scope="module")
+def client():
+    """Crea un cliente de prueba que usa la BD en memoria y añade la API Key."""
     app = create_app()
-    return TestClient(app)
 
-@pytest.fixture
-def db_session() -> Session:
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+    def override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(app) as test_client:
+        api_key = getattr(settings, 'API_KEY', 'test-key')
+        test_client.headers.update({"X-API-Key": api_key})
+        yield test_client
