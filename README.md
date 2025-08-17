@@ -73,6 +73,74 @@ Los errores devuelven:
   }
 }
 ```
+## Ejemplos de Uso
+
+Crear un mensaje
+
+``` Request
+
+curl -X POST "http://127.0.0.1:8000/api/messages" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: mysecretkey" \
+  -d '{
+    "message_id": "msg-001",
+    "session_id": "session-123",
+    "content": "Hola mundo desde la API",
+    "timestamp": "2024-08-14T16:00:00",
+    "sender": "user"
+  }'
+```
+``` Response (201 Created)
+
+{
+  "status": "success",
+  "data": {
+    "message_id": "msg-001",
+    "session_id": "session-123",
+    "content": "Hola mundo desde la API 🚀",
+    "timestamp": "2024-08-14T16:00:00",
+    "sender": "user",
+    "metadata": {
+      "word_count": 5,
+      "character_count": 27,
+      "processed_at": "2025-08-17T18:00:00"
+    }
+  }
+}
+```
+Listar mensajes de una sesión
+
+``` Request
+
+curl -X GET "http://127.0.0.1:8000/api/messages/session-123?limit=5&offset=0" \
+  -H "x-api-key: mysecretkey"
+```
+
+``` Response (200 OK)
+
+{
+  "status": "success",
+  "data": {
+    "total": 1,
+    "limit": 5,
+    "offset": 0,
+    "items": [
+      {
+       "message_id": "msg-001",
+        "session_id": "session-123",
+        "content": "Hola mundo desde la API",
+        "timestamp": "2024-08-14T16:00:00",
+        "sender": "user",
+        "metadata": {
+          "word_count": 5,
+          "character_count": 27,
+          "processed_at": "2025-08-17T18:00:00"
+        }
+      }
+    ]
+  }
+}
+```
 
 ## Pruebas
 ```bash
@@ -110,7 +178,7 @@ tests/
 Copia `.env.example` a `.env` si quieres personalizar el archivo de BD u otros parámetros.
 Por defecto, usa `sqlite:///./app.db`.
 
-## Docker (opcional)
+## Docker
 ```bash
 docker build -t chat-messages-api .
 docker run -p 8000:8000 chat-messages-api
